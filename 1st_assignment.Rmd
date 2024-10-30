@@ -1,13 +1,13 @@
 ---
 title: "第一次作业你的报告题目"
 CJKmainfont: Songti SC
-author: "your name"
+author: "雷婷lititia"
 date: "`r Sys.Date()`"
 output:
-  pdf_document:
-    latex_engine: xelatex
   word_document:
     toc: yes
+  pdf_document:
+    latex_engine: xelatex
   html_document:
     code_folding: show
     fig_caption: yes
@@ -17,9 +17,11 @@ output:
     theme: cosmo
     toc: yes
 ---
+
 ```{r setup, include = FALSE,echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE,error = FALSE, warning = FALSE, message = FALSE,
                       out.width = "100%", split = FALSE, fig.align = "center")
+
 #load library
 library(tidyverse)
 library(kableExtra)
@@ -28,15 +30,21 @@ library(scales)
 library(plotly)
 library(patchwork)
 library(ggrepel)
+library(moments)
+library(psych)
+
 ```
 
 # 你的主要发现
 
-1. 发现1
+- 1、集中趋势：房屋单价整体基本符合正态分布，集中部分：
+     a、房屋单价在1-2万区间集中
+     b、在100平左右时也集中
+     c、简装房屋相对其他几个装修价格更集中，集中在1万3左右
 
-1. 发现2
-  
-1. 发现3
+- 2、影响因素：房屋单价会受装修风格、楼型等因素影响出现波动
+     a、装修风格：精装的房屋单价要高于其他集中装修；
+     b、楼型：板塔结合房屋单价>塔楼房屋单价>板楼房屋单价
     
 
 # 数据介绍
@@ -54,14 +62,28 @@ library(ggrepel)
 ```{r}
 # 载入数据和预处理
 
-lj<- read_csv("/Users/jameschen/Documents/02_Teaching/12_quantitative_thinking_R/data/2023-09-12_cleaned.csv")
+lj<- read_csv("2023-09-12_cleaned.csv")
+view(lj)
 # EDA ---------------------------------------------------------------------
 
 ## 如下语句可以解决画图中的中文显示问题，当然你可以用showtext包来解决
 
-theme_set(theme(text = element_text(family="Songti SC",size = 10))) #这里family设置成你系统中的中文字体名。
+theme_set(theme(text = element_text(family="lititia624",size = 10))) #这里family设置成你系统中的中文字体名。
 
 # 做一些数据预处理，比如把字符型变成factor。
+
+#首先使用names(文件名)函数获取数据内的所有列名。
+#然后通过for循环遍历每一个列名。对于每一列，使用is.character()函数来检查该列的数据类型是否为字符型。如果是，就使用as.factor()函数将其转换为因子型。
+
+column_names <- names(lj)
+
+# 遍历每一列，并用na.strings="NA"指定了将字符NA（注意这里是字符NA，不是缺失值NA的概念）当作缺失值来处理
+for (col_name in column_names) {
+  if (is.character(lj[[col_name]])) {
+    lj[[col_name]] <- as.factor(lj[[col_name]])
+  }
+}
+view(lj)
 
 ```
 
@@ -85,70 +107,259 @@ glimpse(lj)
 ```{r}
 summary(lj)
 ```
-
 可以看到：
 
-- 直观结论1
+- 直观结论1：房屋单价、房屋总价、房屋面积在1st Qu、Median、Mean、3rd Qu数据处是相对集中的，但极端值相差较大
 
-- 直观结论2
+- 直观结论2：南北朝向房屋数量远高于其他朝向房屋
 
-- ...
+- 直观结论3：白沙洲、盘龙城、四新这类偏远城区房屋数量较多
+
+
+
+
+```{r}
+# 汇总概要每列数据的均值/中位数/标准差/最大值/最小值
+lj_summary <- lj%>% 
+  summarise(across(where(is.numeric), list(
+    mean = mean,
+    median = median,
+    sd = sd,
+    min = min,
+    max = max
+  )))
+# 使用psych包（psych包需下载）的describe函数获取更详细的描述（包括偏度、峰度等）
+describe_lj<-describe(lj)
+print(lj_summary)
+print(describe_lj)
+#trimmed表示截尾均值（去除极端值后的均值）；
+#skew偏度（偏度描述了数据分布的不对称程度）；
+#kurtosis峰度（峰度衡量数据分布的尖峭程度或扁平程度。正态分布的峰度为3，超峰态（尖峭）分布的峰度大于3，低峰态（扁平）分布的峰度小于3）；
+#se标准误（样本均值的标准差，用于估计总体均值的抽样分布的标准差。标准误越小，估计的可靠性越高；反之，标准误越大，估计的可靠性越低）；
+#Range极差（最大值与最小值之差）
+```
+
 
 # 探索性分析
 
-## 变量1的数值描述与图形
+## 变量房屋单价的数值描述与图形
+```{r}
+#赋值price_sqm各项描述性数值
+mean_ps<-mean(lj$price_sqm)#均值
+median_ps<-median(lj$price_sqm)#中位数（中位数不受极端值的强烈影响）
+
+tab <- table(lj$price_sqm)
+mode_ps<-names(tab)[which.max(tab)]#众数（出现频率最高的数值）因R语言中没有直接的mode()函数来计算众数，所以借助table()函数统计每个数值出现的频数，然后使用which.max()函数找到频数最大的位置，最后通过names()函数获取对应的众数
+
+var_ps<-var(lj$price_sqm)#方差（衡量一组数据的离散程度。方差是每个数据点与均值之差的平方的平均值。它的值越大，表示数据越分散。）
+sd_ps<-sd(lj$price_sqm)#标准差（标准差是方差的平方根。它与原始数据的单位相同，更直观地描述数据的离散程度）
+range_ps<-max(lj$price_sqm)-min(lj$price_sqm)#极差Range
+ske_ps<-skewness(lj$price_sqm)#偏度（偏度描述了数据分布的不对称程度，首先需要安装和加载moments包）
+kur_ps<-kurtosis(lj$price_sqm)#峰度（峰度衡量数据分布的尖峭程度或扁平程度。正态分布的峰度为3，超峰态（尖峭）分布的峰度大于3，低峰态（扁平）分布的峰度小于 3）
+
+#class(lj$price_sqm)#检查数据类型是否为数值型，返回"numeric"表示类型正确
+```
+
+
+```{r}
+# 使用 ggplot2 绘制直方图、均值线、中位数线和密度曲线,并命名图标题和X轴、y轴
+#aes(y = after_stat(density))将直方图的纵坐标设置为密度，使其与密度曲线的纵坐标一致，而不是默认的频数，可以让直方图的高度和密度曲线的高度在同一尺度上，便于比较
+#bins = 30指定了直方图的柱子数量为 30 个。这个参数可以根据数据的分布和个人需求进行调整，柱子数量不同会导致直方图的形状有所不同
+#fill = "lightblue"设置直方图柱子的填充颜色为浅蓝色。
+#color = "black"设置直方图柱子边框的颜色为黑色
+#geom_vline()用于添加垂直的线条
+#linetype = "dashed"将线条的类型设置为虚线，"dotted"表示点线
+#geom_density()用于添加密度曲线图层
+#col = "颜色", lwd = 线宽
+#labs()函数用于设置图形的标签。
+ggplot(lj, aes(x = price_sqm)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "gray", color = "black") +
+    geom_vline(xintercept = mean_ps, color = "red", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = median_ps, color = "green", linetype = "dotted", size = 1) +
+    geom_density(col = "orange", lwd = 1) +
+    labs(title = "Histogram of price_sqm with Mean, Median and Density Curve", 
+         x = "price_sqm", y = "Density")
+
+```
 
 发现：
 
-- 发现1
+- 发现1:房屋单价基本符合正态分布
 
-- 发现2
+- 发现2：房屋单价在1-2万区间较为集中
 
-## 变量2的数值描述与图形
+
+## 变量房屋总价的数值描述与图形
+```{r}
+#求值
+mean_pl<-mean(lj$price_ttl)#均值
+median_pl<-median(lj$price_ttl)#中位数（中位数不受极端值的强烈影响）
+
+tab <- table(lj$price_ttl)
+mode_pl<-names(tab)[which.max(tab)]#众数（出现频率最高的数值）因R语言中没有直接的mode()函数来计算众数，所以借助table()函数统计每个数值出现的频数，然后使用which.max()函数找到频数最大的位置，最后通过names()函数获取对应的众数
+
+var_pl<-var(lj$price_ttl)#方差（衡量一组数据的离散程度。方差是每个数据点与均值之差的平方的平均值。它的值越大，表示数据越分散。）
+sd_pl<-sd(lj$price_ttl)#标准差（标准差是方差的平方根。它与原始数据的单位相同，更直观地描述数据的离散程度）
+range_pl<-max(lj$price_ttl)-min(lj$price_ttl)#极差Range
+ske_pl<-skewness(lj$price_ttl)#偏度（偏度描述了数据分布的不对称程度，首先需要安装和加载moments包）
+kur_pl<-kurtosis(lj$price_ttl)#峰度（峰度衡量数据分布的尖峭程度或扁平程度。正态分布的峰度为3，超峰态（尖峭）分布的峰度大于3，低峰态（扁平）分布的峰度小于 3）
+
+```
+
+
+```{r}
+# 画图
+ggplot(lj, aes(x = price_ttl)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 200, fill = "gray", color = "black") +
+    geom_vline(xintercept = mean_pl, color = "red", linetype = "dashed", size = 1) +
+    geom_vline(xintercept = median_pl, color = "green", linetype = "dotted", size = 1) +
+    geom_density(col = "orange", lwd = 1) +
+    labs(title = "Histogram of price_ttl with Mean, Median and Density Curve", 
+         x = "price_ttl", y = "Density")+
+    scale_x_continuous(breaks = seq(0, 2000, 100))
+
+```
+发现：
+
+- 发现1:房屋总价近似正态分布
+
+- 发现2：房屋总价在100万左右最为集中
+
+## 变量不同地区房屋数量的数值描述与图形
+
+```{r}
+#需下载与读取"wordcloud"程序包
+# 如果需要对数据预处理，统计频率之前进行， property_region 数据（去除空格并转换为小写）
+#lj$property_region <- gsub(" ", "", tolower(lj$property_region))
+
+# 统计每个区域出现的频率
+region_fre <- table(lj$property_region)
+# 绘制云文字图
+#random.order = FALSE表示按频率从高到低排列单词（而不是随机排列）
+#rot.per = 0.35设置约 35% 的单词有一定角度的旋转，增加视觉效果
+#colors = brewer.pal(8, "Dark2")使用RColorBrewer包中的Dark2调色板为单词设置颜色，这里需要RColorBrewer包已安装
+
+wordcloud(names(region_fre), region_fre, 
+          min.freq = 1, max.words = 200, 
+          random.order = FALSE, rot.per = 0.35, 
+          colors = brewer.pal(8, "Dark2"))
+
+```
 
 发现：
 
-- 发现1
+- 发现1：白沙洲、盘龙城、四新这类偏远城区房屋数量较多
 
-- 发现2
 
-## 变量...的数值描述与图形
+
+## 探索问题1:房屋单价与房屋面积的关系
+
+```{r}
+# 计算 building_area 的上下四分位数
+Q1_area <- quantile(lj$building_area, 0.25)
+Q3_area <- quantile(lj$building_area, 0.75)
+IQR_area <- Q3_area - Q1_area
+
+# 计算 price_sqm 的上下四分位数
+Q1_price <- quantile(lj$price_sqm, 0.25)
+Q3_price <- quantile(lj$price_sqm, 0.75)
+IQR_price <- Q3_price - Q1_price
+
+# 确定合理范围（这里以 1.5 倍四分位距为标准）
+lower_bound_area <- Q1_area - 1.5 * IQR_area
+upper_bound_area <- Q3_area + 1.5 * IQR_area
+lower_bound_price <- Q1_price - 1.5 * IQR_price
+upper_bound_price <- Q3_price + 1.5 * IQR_price
+
+# 剔除极端值的数据子集
+filtered_data <- lj[lj$building_area >= lower_bound_area & lj$building_area <= upper_bound_area &
+                     lj$price_sqm >= lower_bound_price & lj$price_sqm <= upper_bound_price, ]
+
+# 使用 ggplot2 绘制散点图和趋势线
+ggplot(filtered_data, aes(x = building_area, y = price_sqm)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = TRUE) + 
+    labs(title = "Scatter Plot and Trend Line of building_area and price_sqm (without outliers)",
+         x = "Building Area",
+         y = "Price per Square Meter")
+```
 
 发现：
 
-- 发现1
+- 发现1：房屋单价在建筑面积较大或较小时较为离散，在100平左右时集中
 
-- 发现2
+- 发现2：不论面积，房屋都基本在1-2万区间集中
 
-## 探索问题1
+
+## 探索问题2:房屋单价与房屋装修的关系
+
+```{r}
+#计算每种装修下单价的均值和中位数
+summary_data <- lj %>% 
+    group_by(decoration) %>% 
+    summarise(mean_price = mean(price_sqm),
+              median_price = median(price_sqm))
+#画图
+ggplot(lj, aes(x = price_sqm, fill = decoration)) +
+  #直方图，并令y轴为密度；position = "dodge"使不同decoration类别的直方图并排显示
+    geom_histogram(aes(y = after_stat(density)), position = "dodge", bins = 30) +
+  #geom_density(alpha = 0.3)：绘制密度曲线，alpha = 0.3设置透明度，使密度曲线在重叠部分可以看到不同的颜色层次。
+    geom_density(alpha = 0.3) +
+    geom_vline(data = summary_data, aes(xintercept = mean_price, color = "Mean"), linetype = "dashed") +
+    geom_vline(data = summary_data, aes(xintercept = median_price, color = "Median"), linetype = "dotted") +
+    labs(title = "Histogram and Density Curve of price_sqm by decoration",
+         x = "Price per Square Meter",
+         y = "Density",
+         fill = "Decoration",
+         color = "Statistic")
+```
+
 
 发现：
 
-- 发现1
+- 发现1：精装的房屋单价要高于其他集中装修
 
-- 发现2
+- 发现2：简装房屋相对其他几个装修价格更集中，集中在1万3左右
 
-## 探索问题2
+
+## 探索问题3:房屋单价与房型的关系
+
+```{r}
+# 计算每个 property_style 下 price_sqm 的均值和中位数
+stat_data <- lj %>%
+    group_by(property_style) %>%
+    summarise(mean_price = mean(price_sqm),
+              median_price = median(price_sqm))
+
+# 绘制分面直方图，并添加均值和中位数线
+ggplot(lj, aes(x = price_sqm)) +
+    geom_histogram(bins = 30) +
+    geom_vline(data = stat_data, aes(xintercept = mean_price, color = "Mean"), linetype = "dashed") +
+    geom_vline(data = stat_data, aes(xintercept = median_price, color = "Median"), linetype = "dotted") +
+  #在facet_wrap()中，ncol = 3指定分面图按 3 列排列。scales = "free_x"表示每个分面的x轴尺度可以自由变化。
+    facet_wrap(~property_style, ncol = 3, scales = "free_x") +
+    labs(title = "Histogram of price_sqm by property_style",
+         x = "Price per Square Meter",
+         y = "Frequency",
+         color = "Statistic")
+
+
+```
+
+
+
 
 发现：
 
-- 发现1
+- 发现1：各楼型中房屋单价都是均值略高于中位数，即都存在极端值拉高均价的情况
 
-- 发现2
-
-## 探索问题3
-
-发现：
-
-- 发现1
-
-- 发现2
+- 发现2：房屋单价：板塔结合>塔楼>板楼
 
 ---
 
 # 发现总结
 
-用1-3段话总结你的发现。
+-结合2023年9月12日获取了[链家武汉二手房网站]数据分析武汉二手房信息发现，价格上：武汉二手房在房屋单价、房屋总价上有明显的集中性，单价集中在1-2万区间，总价集中在100万左右；朝向上：房屋主朝南、次朝北的房屋呈超峰态分布；楼型上：板楼呈峰态分布；地域上：白沙洲、盘龙城、四新这类偏远城区房屋频率高于中心城区。总体来说武汉二手房呈现以南北朝向、板楼房型、远程区、单价1-2万、总价100万左右的特征的房源类型流通。
+-分析武汉二手房单价与房屋面积、房屋装修和楼型相关性发现，房屋单价受建筑面积影响不大，主要在1-2万单价、面积100平左右时集中；但在装修上，不同装修对价格有一定影响，精装的房屋单价要高于其他集中装修，简装房屋相对其他几个装修价格峰态更明显，集中在1万3的单价左右；在建筑楼型上房屋单价：板塔结合>塔楼>板楼。总体来说武汉二手房单价受装修和楼型影响波动，受面积影响较小。
 
-
-
+```
